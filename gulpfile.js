@@ -2,20 +2,45 @@
 // Importing specific gulp API functions lets us write them below as series() instead of gulp.series()
 const { src, dest, watch, series, parallel } = require('gulp');
 // Importing all the Gulp-related packages we want to use
+
+const browserSync = require('browser-sync');
+const server = browserSync.create();
+const del = require('del');
 const sourcemaps = require('gulp-sourcemaps');
 const sass = require('gulp-sass');
-const concat = require('gulp-concat');
-const uglify = require('gulp-uglify');
+const terser = require('gulp-terser');
 const postcss = require('gulp-postcss');
 const autoprefixer = require('autoprefixer');
 const cssnano = require('cssnano');
-var replace = require('gulp-replace');
-
+const replace = require('gulp-replace');
+const imagemin = require('gulp-imagemin');
+ 
 
 // File paths
 const files = { 
     scssPath: 'app/scss/**/*.scss',
-    jsPath: 'app/js/**/*.js'
+    jsPath: 'app/js/**/*.js',
+    imagePath: 'app/images/**/*',
+    fontPath: 'app/fonts/**/*',
+    musicPath: 'app/music/*',
+    htmlPath: '*.html'
+}
+
+const clean = () => del(['dist']);
+
+
+function reload(done) {
+  server.reload();
+  done();
+}
+
+function serve(done) {
+  server.init({
+    server: {
+      baseDir: './'
+    }
+  });
+  done();
 }
 
 // Sass task: compiles the style.scss file into style.css
@@ -25,7 +50,7 @@ function scssTask(){
         .pipe(sass()) // compile SCSS to CSS
         .pipe(postcss([ autoprefixer(), cssnano() ])) // PostCSS plugins
         .pipe(sourcemaps.write('.')) // write sourcemaps file in current directory
-        .pipe(dest('dist')
+        .pipe(dest('dist/css')
     ); // put final CSS in dist folder
 }
 
@@ -35,36 +60,47 @@ function jsTask(){
         files.jsPath
         //,'!' + 'includes/js/jquery.min.js', // to exclude any specific files
         ])
-        .pipe(concat('all.js'))
-        .pipe(uglify())
-        .pipe(dest('dist')
+  //      .pipe(concat('all.js'))
+  //      .pipe(terser())
+        .pipe(dest('dist/js')
     );
 }
 
-// Cachebust
-var cbString = new Date().getTime();
-function cacheBustTask(){
-    return src(['index.html'])
-        .pipe(replace(/cb=\d+/g, 'cb=' + cbString))
-        .pipe(dest('.'));
+function imageTask() {
+    return src(files.imagePath)
+    .pipe(imagemin())
+    .pipe(dest('dist/images'))
+}
+
+
+function fontTask() {
+    return src(files.fontPath)
+            .pipe(dest('dist/fonts'));
+}
+
+function musicTask() {
+    return src(files.musicPath)
+            .pipe(dest('dist/music'));
 }
 
 // Watch task: watch SCSS and JS files for changes
 // If any change, run scss and js tasks simultaneously
 function watchTask(){
-    watch([files.scssPath, files.jsPath], 
+    watch([files.scssPath, files.jsPath, files.imagePath, files.musicPath, files.fontPath, files.htmlPath], 
         series(
-            parallel(scssTask, jsTask),
-            cacheBustTask
+            series(clean, scssTask, jsTask, imageTask, fontTask, musicTask, reload)            
         )
     );    
 }
+
 
 // Export the default Gulp task so it can be run
 // Runs the scss and js tasks simultaneously
 // then runs cacheBust, then watch task
 exports.default = series(
-    parallel(scssTask, jsTask), 
-    cacheBustTask,
+    clean,
+    parallel(scssTask, jsTask, imageTask, fontTask, musicTask), 
+    serve,
     watchTask
 );
+
